@@ -112,7 +112,6 @@ class PoopJob(object):
             self.input = parent.output
         else:
             self.input = input
-            assert(None != self.input)
         self.output = output
 
     def name(self):
@@ -209,17 +208,21 @@ def run(argv, poopklass):
     '''
     op = argv[1]
     klassdict = makeklassdict(poopklass)
-    run = getrunner(poopklass)
 
     if op in (_MAP, _RED):
         jobklass = klassdict[argv[2]]
+        instance = jobklass()
+        run = getrunner(jobklass)
+        if hasattr(instance, 'setup'): instance.setup()
     if op == _MAP:
-        out = run.itermap(sys.stdin, jobklass.map)
-        if hasattr(jobklass, 'combiner'):
-            out = run.iterreduce(sorted(out), jobklass.combiner)
+        out = run.itermap(sys.stdin, instance.map)
+        if hasattr(instance, 'combiner'):
+            out = run.iterreduce(sorted(out), instance.combiner)
         out = run.stream_encode(out)
+        if hasattr(instance, 'postmap'): instance.postmap()
     elif op == _RED:
-        out = run.stream_encode(run.iterreduce(sys.stdin, jobklass.reduce, run.stream_decode))
+        out = run.stream_encode(run.iterreduce(sys.stdin, instance.reduce, run.stream_decode))
+        if hasattr(instance, 'postreduce'): instance.postreduce()
     else:
         return main(argv, poopklass)
 

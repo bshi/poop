@@ -11,14 +11,21 @@ import poop
 #         python wc.py REDUCE UniqueCount
 
 class WordCount(poop.PoopJob):
-    @staticmethod
-    def map(key, val):
+    def setup(self):
+        print >>sys.stderr, "WordCount().setup()"
+
+    def map(self, key, val):
         val = filter(lambda x: x not in string.punctuation, val)
         for w in val.split(): yield (w.lower(), 1)
 
-    @staticmethod
-    def reduce(key, vals):
+    def postmap(self):
+        print >>sys.stderr, "WordCount().postmap()"
+
+    def reduce(self, key, vals):
         yield (key, sum(map(int, vals)))
+
+    def postreduce(self):
+        print >>sys.stderr, "WordCount().postreduce()"
 
 
 class UniqueCount(poop.PoopJob):
@@ -26,7 +33,10 @@ class UniqueCount(poop.PoopJob):
     def map(key, val):
         yield ('unique words', 1)
 
-    reduce = staticmethod(WordCount.reduce)
+    @staticmethod
+    def reduce(key, vals):
+        yield (key, sum(map(int, vals)))
+
 
 WordCount.child = UniqueCount
 poop.run(sys.argv, WordCount)
