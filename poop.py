@@ -17,10 +17,12 @@ __doc__ = '''P(ython Had)oop Streaming framework.
 The poop module implements all the boring plumbing (pun intended) and
 boilerplate code required to implement and invoke Hadoop streaming jobs written
 in Python.  It is inspired by Klaas Bosteels' excellent ``dumbo`` [1]_ module
-but with a more declarative API style.
+but with a more declarative API style.  Another project combining Hadoop and
+Jython is Happy [2]_.
 
-Here is a sample poop program that counts the occurence of unique words
-within an input set::
+Here is a sample poop program that counts the occurence of unique words within
+an input set.  These two PoopJobs can be combined into one, but the example
+illustrates job chaining::
 
     import string
     import sys
@@ -47,7 +49,9 @@ within an input set::
     WordCount.child = UniqueCount
     run(sys.argv, WordCount)
 
-.. [1] http://github.com/klbostee/dumbo/
+
+.. [1] Dumbo: http://github.com/klbostee/dumbo/
+.. [2] Happy: http://www.mqlx.com/~colin/happy.html
 '''
 
 _MAP, _RED = 'MAP', 'REDUCE'
