@@ -6,8 +6,12 @@ from optparse import OptionParser, OptionValueError
 
 # Generate Documentation
 # epydoc -v --docformat restructuredtext poop.py
-
 __all__ = ('PoopJob', 'PoopRunner', 'run', 'getparser')
+
+
+__author__="Bo Shi"
+__copyright__="Copyright 2008 Bo Shi"
+__license__="MIT"
 __doc__ = '''P(ython Had)oop Streaming framework.
 
 The poop module implements all the boring plumbing (pun intended) and

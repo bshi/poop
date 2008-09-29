@@ -1,3 +1,4 @@
+# License: Public Domain
 import string
 import sys
 import poop
