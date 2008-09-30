@@ -29,22 +29,21 @@ illustrates job chaining::
     from poop import PoopJob, run
     
     class WordCount(PoopJob):
-        @staticmethod
-        def map(key, val):
+        def map(self, key, val):
             for w in val.split(): yield (w.lower(), 1)
     
-        @staticmethod
-        def reduce(key, vals):
+        def reduce(self, key, vals):
             yield (key, sum(map(int, vals)))
     
-    
+    # the map/reduce functions can optionally be static
     class UniqueCount(PoopJob):
         @staticmethod
         def map(key, val):
             yield ('unique words', 1)
 
-        # re-use the reducer in WordCount
-        reduce = staticmethod(WordCount.reduce)
+        @staticmethod
+        def reduce(key, vals):
+            yield (key, sum(map(int, vals)))
     
     WordCount.child = UniqueCount
     run(sys.argv, WordCount)
@@ -280,9 +279,23 @@ def main(argv, poopklass):
 def getparser():
     '''Return the optparse.OptionParser instance used by run().
 
-    Client programs can make adjustments to the default command line option
-    processing configuraiton.  Modifying the option parser is recommended over
-    parsing sys.argv and passing a modified version to run().
+    The optparse [1]_ module makes it convenient to extend the existing command
+    line interface.  Modifying the option parser is recommended over parsing
+    sys.argv and passing a modified version to run().
+
+    Sample main program extending options::
+
+        import sys, poop
+        ...
+        if __name__ == "__main__":
+            parser = poop.getparser()
+            parser.add_option('--somestring', dest='somestring')
+            opts, args = parser.parse_args(sys.argv)
+
+            extras = get_input_list(opts.somestring)
+            poop.run(sys.argv + extras, SomePoopJob)
+
+    .. [1] http://docs.python.org/lib/module-optparse.html
     '''
     return _parser
 
