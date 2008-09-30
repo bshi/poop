@@ -88,12 +88,9 @@ _parser.add_option('-p', '--python', dest='python', default='python',
         help='python command with which to invoke the job on worker nodes')
 _parser.add_option('--dryrun', action='store_true', dest='dryrun',
         help='print out job list invocations and exit.')
-# Future features:
-#_parser.add_option('-D', '--delete_intermediates', action='store_true',
-#       help='delete intermediate data directories after run.',
-#       dest='del_int_data')
-#_parser.add_option('--getouput', dest='getoutput',
-#       help='download the output to a file after this task has finished.')
+_parser.add_option('-D', '--delete_intermediates', action='store_true',
+       help='delete intermediate data directories after run.',
+       dest='del_int_data')
 
 
 class PoopJob(object):
@@ -143,8 +140,6 @@ class PoopJob(object):
             opts.extra_hadoop_opts,
         ]
 
-        # extra magic to allow client programs to not specify any reduce
-        # function implicitly
         if hasattr(klass, 'reduce'):
             args.append("-reducer '%s %s %s %s'" % (opts.python, jobsrc, _RED, clsname))
         else:
@@ -185,7 +180,6 @@ class PoopRunner(object):
         if decoder: data = decoder(input)
         else: data = input
         for key, values in groupby(data, itemgetter(0)):
-            #for output in reducer(key, (v[1] for v in values)):
             for output in reducer(key, (v[1] for v in values)):
                 yield output
 
@@ -230,14 +224,21 @@ def run(argv, poopklass):
     return 0
 
 
+def run_and_dump(cmd): 
+    output = os.popen(cmd)
+    for line in output: print line,
+    exitcode = output.close()
+    return exitcode
+
+
 def main(argv, poopklass):
     'Code only executed by the client requesting the jobs (non-map/red logic).'
     opts, args = _parser.parse_args(argv)
-    joblist = makejoblist(poopklass, opts.inputlist, opts.output, opts.int_data_dir)
+    joblist, intdata = makejoblist(poopklass, opts.inputlist, opts.output, opts.int_data_dir)
 
     if opts.dryrun:
         shellcmd = 'Locally in Bash'
-        print '-'*5, shellcmd, '-'*(74 - len(shellcmd))
+        print '-'*5, shellcmd, '-'*(73 - len(shellcmd))
         print '$ cat /path/to/inputA /path/to/inputB',
         for name, j in joblist:
             if hasattr(j, 'map'):
@@ -246,25 +247,33 @@ def main(argv, poopklass):
                 print ' | %s %s %s %s' % (opts.python, argv[0], _RED, name),
         print
         for name, j in joblist:
-            print '='*5, name, '='*(74 - len(name))
+            print '='*5, name, '='*(73 - len(name))
             print j.submit(argv, opts)
         print '='*80
     else:
         for name, j in joblist:
-            print '='*5, name, '='*(74 - len(name))
-            output = os.popen(j.submit(argv, opts))
-            for line in output:
-                print line,
-            exitcode = output.close()
-            print 'exitcode =', exitcode
-            # TODO: exitcode == None implies 'success' but hadoop streaming
-            # jobs exit w/ code 0 regardless.  We need some way of determining
-            # failure.
+            print '='*5, name, '='*(73 - len(name))
+            exitcode = run_and_dump(j.submit(argv, opts))
+            # exitcode == None implies 'success' but hadoop streaming jobs
+            # sometimes exit w/ code 0 regardless (usually when failure occurs
+            # during job initialization... when map/red fails, exit code is
+            # non-zero)
             if None != exitcode:
                 errmsg = 'Job failed (exit code %i).  Exiting...' % exitcode
                 print >>sys.stderr, errmsg
                 return 1
         print '='*80
+
+    # clean up any intermediate data
+    if opts.del_int_data and intdata:
+        hadoop = os.path.join(opts.hadoophome, 'bin', 'hadoop')
+        print '\nCleaning up intermediate data:'
+        delcmd = '%s dfs -rmr %s' % (hadoop, intdata)
+        if opts.dryrun:
+            print delcmd
+        else:
+            run_and_dump(delcmd)
+
     return 0
 
 
@@ -329,14 +338,20 @@ def makejoblist(poopklass, input, output, int_data_dir='/__poop'):
     # collide so we sha1 the output and use that as part of intermediate file
     # names
     output_sha1 = sha1(output).hexdigest()
+    job_intdata = '/'.join((int_data_dir, output_sha1))
+    hsa_intdata = False
 
     i = 1
     while None != getchild(joblist[-1][1]):
         job = joblist[-1][1]
         # adjust output to go to an intermediate directory
         job.output = '/'.join((int_data_dir, output_sha1, str(i), job.name()))
+        has_intdata = True
         childklass = getchild(job)
         joblist.append((childklass.__name__, childklass(job, input, output)))
         i += 1
 
-    return joblist
+    if has_intdata:
+        return joblist, job_intdata
+    else:
+        return joblist, None
