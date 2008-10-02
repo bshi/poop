@@ -238,7 +238,7 @@ def main(argv, poopklass):
     if opts.dryrun:
         shellcmd = 'Locally in Bash'
         print '-'*5, shellcmd, '-'*(73 - len(shellcmd))
-        print '$ cat /path/to/inputA /path/to/inputB',
+        print '$ cat /path/to/inputA /path/to/inputB ...',
         for name, j in joblist:
             if hasattr(j, 'map'):
                 print '\\\n\t| %s %s %s %s | sort' % (opts.python, argv[0], _MAP, name),
@@ -352,19 +352,17 @@ def makejoblist(poopklass, input, output, int_data_dir='/__poop'):
     # names
     output_sha1 = sha1(output).hexdigest()
     job_intdata = '/'.join((int_data_dir, output_sha1))
-    hsa_intdata = False
 
     i = 1
     while None != getchild(joblist[-1][1]):
         job = joblist[-1][1]
         # adjust output to go to an intermediate directory
         job.output = '/'.join((int_data_dir, output_sha1, str(i), job.name()))
-        has_intdata = True
         childklass = getchild(job)
         joblist.append((childklass.__name__, childklass(job, input, output)))
         i += 1
 
-    if has_intdata:
+    if i > 1:
         return joblist, job_intdata
     else:
         return joblist, None
