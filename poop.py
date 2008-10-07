@@ -250,9 +250,14 @@ def main(argv, poopklass):
     opts, args = _parser.parse_args(argv)
     joblist, intdata = makejoblist(poopklass, opts.inputlist, opts.output, opts.int_data_dir)
 
+    def separator(title, char='=', nstart=5, width=80):
+        if title is None:
+            print char*width
+        else:
+            print char*nstart, title, char*(width-nstart-2-len(title))
+
     if opts.dryrun:
-        shellcmd = 'Locally in Bash'
-        print '-'*5, shellcmd, '-'*(73 - len(shellcmd))
+        separator('Locally in Bash')
         print '$ cat /path/to/inputA /path/to/inputB ...',
         for name, j in joblist:
             if hasattr(j, 'map'):
@@ -261,12 +266,12 @@ def main(argv, poopklass):
                 print ' | %s %s %s %s' % (opts.python, argv[0], _RED, name),
         print
         for name, j in joblist:
-            print '='*5, name, '='*(73 - len(name))
+            separator(name)
             print j.submit(argv, opts)
-        print '='*80
+        separator(None)
     else:
         for name, j in joblist:
-            print '='*5, name, '='*(73 - len(name))
+            separator(name)
             exitcode = submit_and_monitor(j.submit(argv, opts))
             # exitcode == None implies 'success' but hadoop streaming jobs
             # sometimes exit w/ code 0 regardless (usually when failure occurs
@@ -276,7 +281,7 @@ def main(argv, poopklass):
                 errmsg = 'Job failed (exit code %i).  Exiting...' % exitcode
                 print >>sys.stderr, errmsg
                 return 1
-        print '='*80
+        separator(None)
 
     # clean up any intermediate data
     if opts.del_int_data and intdata:
