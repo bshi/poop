@@ -116,9 +116,6 @@ class PoopJob(object):
     def _proc_args(self, argv, opts):
         "Process command line arguments for generic jobs"
         klass = self.__class__
-
-        # here we don't use name() because it might be overridden
-        jobsrc = argv[0].split("/")[-1]
         args = []
 
         # set input/output command-line flags
@@ -147,6 +144,7 @@ class PoopJob(object):
         klass = self.__class__
         clsname = klass.__name__
         hadoop, args = self._proc_args(argv, opts)
+        jobsrc = argv[0].split("/")[-1]
 
         args += [
             # -file poop.py (whereever it might be)
@@ -375,11 +373,8 @@ def makejoblist(poopklass, input, output, int_data_dir='/__poop'):
     i = 1
     while None != getchild(joblist[-1][1]):
         job = joblist[-1][1]
-        if job.use_klass_output:
-            pass
-        else:
-            # adjust output to go to an intermediate directory
-            job.output = '/'.join((int_data_dir, output_sha1, str(i), job.name()))
+        # adjust output to go to an intermediate directory
+        job.output = '/'.join((int_data_dir, output_sha1, str(i), job.name()))
         childklass = getchild(job)
         joblist.append((childklass.__name__, childklass(job, input, output)))
         i += 1
