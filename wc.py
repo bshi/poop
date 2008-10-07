@@ -4,7 +4,7 @@ import sys
 import poop
 
 # Sample command line testing invokation:
-# $ cat dfs.txt | \
+# $ cat data.txt | \
 #         python wc.py MAP WordCount | sort | \
 #         python wc.py REDUCE WordCount | \
 #         python wc.py MAP UniqueCount | sort \

@@ -5,8 +5,8 @@ from operator import itemgetter
 from optparse import OptionParser, OptionValueError
 
 # Generate Documentation
-# epydoc -v --docformat restructuredtext poop.py
-__all__ = ('PoopJob', 'PoopRunner', 'run', 'getparser')
+# epydoc -v --docformat restructuredtext -o poop-api poop.py
+__all__ = ('PoopJob', 'JavaJob', 'PoopRunner', 'run', 'getparser')
 
 
 __author__="Bo Shi"
@@ -113,12 +113,11 @@ class PoopJob(object):
     def name(self):
         return self.__class__.__name__
 
-    def submit(self, argv, opts):
-        'Generate the shell command to submit this PoopJob instance.'
+    def _proc_args(self, argv, opts):
+        "Process command line arguments for generic jobs"
         klass = self.__class__
 
         # here we don't use name() because it might be overridden
-        clsname = klass.__name__
         jobsrc = argv[0].split("/")[-1]
         args = []
 
@@ -128,6 +127,26 @@ class PoopJob(object):
         else:
             args += [u'-input %s' % i for i in self.input]
         args.append('-output %s' % self.output)
+
+        # add any additional flags specified in the class variable 'cli'
+        if hasattr(klass, 'cli'):
+            conf = klass.cli
+            args += [u'-%s "%s"' % (key, unicode(conf[key])) for key in conf]
+
+        # optparse checks for hadoop home, but in case it's not given, we need
+        # to check the default:
+        if not os.path.exists(opts.hadoophome):
+            raise OptionValueError(
+                ' '.join(('Hadoop home', opts.hadoophome, 'does not exist.')))
+        hadoop = os.path.join(opts.hadoophome, 'bin', 'hadoop')
+
+        return hadoop, args
+
+    def submit(self, argv, opts):
+        'Generate the shell command to submit this PoopJob instance.'
+        klass = self.__class__
+        clsname = klass.__name__
+        hadoop, args = self._proc_args(argv, opts)
 
         args += [
             # -file poop.py (whereever it might be)
@@ -144,21 +163,18 @@ class PoopJob(object):
         else:
             args.append('-numReduceTasks 0')
 
-        # add any additional flags specified in the class variable 'cli'
-        if hasattr(klass, 'cli'):
-            conf = klass.cli
-            args += [u'-%s "%s"' % (key, unicode(conf[key])) for key in conf]
-
-        # optparse checks for hadoop home, but in case it's not given, we need
-        # to check the default:
-        if not os.path.exists(opts.hadoophome):
-            raise OptionValueError(
-                ' '.join(('Hadoop home', opts.hadoophome, 'does not exist.')))
-        hadoop = os.path.join(opts.hadoophome, 'bin', 'hadoop')
-
         if opts.streaming: cmd = [hadoop, 'jar', opts.streaming]
         else: cmd = [hadoop, 'jar', getstreamingjar(opts.hadoophome)]
 
+        return u' '.join(cmd + args)
+
+
+class JavaJob(PoopJob):
+    'Generate the shell command to submit a "native" Java Hadoop task.'
+    def submit(self, argv, opts):
+        klass = self.__class__
+        hadoop, args = self._proc_args(argv, opts)
+        cmd = [hadoop, 'jar', klass.jar, klass.javaclass]
         return u' '.join(cmd + args)
 
 
@@ -223,7 +239,8 @@ def run(argv, poopklass):
     return 0
 
 
-def run_and_dump(cmd): 
+def submit_and_monitor(cmd):
+    'Submit a job and pipe the output to stdout.'
     output = os.popen(cmd)
     for line in output: print line,
     exitcode = output.close()
@@ -252,7 +269,7 @@ def main(argv, poopklass):
     else:
         for name, j in joblist:
             print '='*5, name, '='*(73 - len(name))
-            exitcode = run_and_dump(j.submit(argv, opts))
+            exitcode = submit_and_monitor(j.submit(argv, opts))
             # exitcode == None implies 'success' but hadoop streaming jobs
             # sometimes exit w/ code 0 regardless (usually when failure occurs
             # during job initialization... when map/red fails, exit code is
@@ -271,7 +288,7 @@ def main(argv, poopklass):
         if opts.dryrun:
             print delcmd
         else:
-            run_and_dump(delcmd)
+            submit_and_monitor(delcmd)
 
     return 0
 
@@ -305,10 +322,12 @@ def _attr(klass, name, ifnotexists):
     else: return ifnotexists
 
 
-def getchild(klass): return _attr(klass, 'child', None)
+def getchild(klass):
+    return _attr(klass, 'child', None)
 
 
-def getrunner(klass): return _attr(klass, 'runner', PoopRunner())
+def getrunner(klass):
+    return _attr(klass, 'runner', PoopRunner())
 
 
 def getstreamingjar(hadoophome):
@@ -356,8 +375,11 @@ def makejoblist(poopklass, input, output, int_data_dir='/__poop'):
     i = 1
     while None != getchild(joblist[-1][1]):
         job = joblist[-1][1]
-        # adjust output to go to an intermediate directory
-        job.output = '/'.join((int_data_dir, output_sha1, str(i), job.name()))
+        if job.use_klass_output:
+            pass
+        else:
+            # adjust output to go to an intermediate directory
+            job.output = '/'.join((int_data_dir, output_sha1, str(i), job.name()))
         childklass = getchild(job)
         joblist.append((childklass.__name__, childklass(job, input, output)))
         i += 1
