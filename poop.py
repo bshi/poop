@@ -198,7 +198,7 @@ class PoopRunner(object):
 
     def stream_encode(self, stream):
         'Determines how the input to ``iterreduce`` is parsed.'
-        for line in stream: yield u"\t".join(map(unicode, line))
+        for line in stream: yield "\t".join(line)
 
     def stream_decode(self, stream):
         'Determines how mapper and reducer is written to ``sys.stdout``.'
