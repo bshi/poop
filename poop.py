@@ -1,5 +1,7 @@
 import os
 import sys
+from base64 import b64decode, b64encode
+from cPickle import dumps, loads, HIGHEST_PROTOCOL
 from itertools import groupby
 from operator import itemgetter
 from optparse import OptionParser, OptionValueError
@@ -70,6 +72,7 @@ def check_hadoop_home(option, opt_str, value, parser):
 
 _parser = OptionParser()
 _parser.add_option('-i', '--input', dest='inputlist', action='append')
+_parser.add_option('-f', '--file', dest='filelist', action='append')
 _parser.add_option('-o', '--output', dest='output')
 _parser.add_option('-e', '--extra_hadoop_opts', dest='extra_hadoop_opts',
         help='extra hadoop command line arguments to pass',
@@ -156,6 +159,10 @@ class PoopJob(object):
             opts.extra_hadoop_opts,
         ]
 
+        # specify some extra files
+        if opts.filelist is not None:
+            for extra in opts.filelist: args.append("-file '%s'" % extra)
+
         if hasattr(klass, 'reduce'):
             args.append("-reducer '%s %s %s %s'" % (opts.python, jobsrc, _RED, clsname))
         else:
@@ -177,7 +184,11 @@ class JavaJob(PoopJob):
 
 
 class PoopRunner(object):
-    'Override to implement custom input/output formats.'
+    '''Override to implement custom input/output formats.
+    
+    This uses the tab delimited format used in the classical streaming
+    examples.
+    '''
     # iter{map,reduce} functions are modified from dumbo package
     # http://github.com/klbostee/dumbo/
     def itermap(self, input, mapper):
@@ -205,6 +216,34 @@ class PoopRunner(object):
         for input in stream: yield input.split(u"\t", 1)
 
 
+class PickleRunner(PoopRunner):
+    '''Picklable python objects can be passed between the mapper and reducer.
+
+    A runner where the mapper yields a two-tuple (key, datastruct) where
+    datastruct is any arbitrary picklable data structure.
+    '''
+    @staticmethod
+    def encode(obj):
+        return b64encode(dumps(obj, HIGHEST_PROTOCOL))
+
+    @staticmethod
+    def decode(obj):
+        return loads(b64decode(obj))
+
+    def itermap(self, input, mapper):
+        for i in input:
+            for key, datastruct in mapper(None, i):
+                yield self.encode(key), self.encode(datastruct)
+
+    def iterreduce(self, input, reducer, decoder=None):
+        if decoder: data = decoder(input)
+        else: data = input
+        for key, values in groupby(data, itemgetter(0)):
+            for output in reducer(self.decode(key),
+                    (self.decode(v[1]) for v in values)):
+                yield output
+
+
 def run(argv, poopklass):
     '''The __main__ logic.
 
@@ -228,7 +267,8 @@ def run(argv, poopklass):
         out = run.stream_encode(out)
         if hasattr(instance, 'postmap'): instance.postmap()
     elif op == _RED:
-        out = run.stream_encode(run.iterreduce(sys.stdin, instance.reduce, run.stream_decode))
+        out = run.stream_encode(
+                run.iterreduce(sys.stdin, instance.reduce, run.stream_decode))
         if hasattr(instance, 'postreduce'): instance.postreduce()
     else:
         return main(argv, poopklass)
