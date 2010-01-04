@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 from base64 import b64decode, b64encode
 from cPickle import dumps, loads, HIGHEST_PROTOCOL
 from itertools import groupby
@@ -213,7 +214,7 @@ class PoopRunner(object):
 
     def stream_decode(self, stream):
         'Determines how mapper and reducer is written to ``sys.stdout``.'
-        for input in stream: yield input.split(u"\t", 1)
+        for input in stream: yield input.split("\t", 1)
 
 
 class PickleRunner(PoopRunner):
@@ -275,6 +276,25 @@ def run(argv, poopklass):
 
     for e in out: print e
     return 0
+
+
+def current_file():
+    if 'map_input_file' in os.environ:
+        return os.environ['map_input_file']
+    else:
+        return 'UNKNOWN_INPUT_FILE_OR_STDIN'
+
+
+def stacktrace(header=None):
+    '''Print exceptions to stderr along with other useful information.
+
+    The ``header`` argument can be used for custom error codes, etc for easy
+    log searching.
+    '''
+    if header is not None:
+        print >> sys.stderr, header
+    print >> sys.stderr, "In file:", current_file()
+    traceback.print_exc(file=sys.stderr)
 
 
 def submit_and_monitor(cmd):
